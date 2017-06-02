@@ -8,6 +8,7 @@ var express = require('express')
   , passport = require('passport')
   , util = require('util')
   , wsfedsaml2 = require('passport-wsfed-saml2').Strategy
+  , SamlStrategy = require('passport-saml').Strategy
   , fs = require('fs')
   , morgan = require('morgan')
   , cookieParser = require('cookie-parser')
@@ -46,36 +47,63 @@ passport.deserializeUser(function(id, done) {
   });
 });
 
-passport.use(new wsfedsaml2(
+
+passport.use(new SamlStrategy(
   {
-    path: '/login/callback',
-    realm: 'urn:dev2:knomatic',
-    identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
-    //thumbprint: '3F69575310D3A85E16165BE434252C49E4419A4B'
-    // setup either a certificate base64 encoded (cer) or just the thumbprint of the certificate if public key is embedded in the signature
-    cert: 'MIICvDCCAaQCCQClWYojYx5BQjANBgkqhkiG9w0BAQUFADAgMR4wHAYDVQQDExVk ZXYtZmlsZS5rbm9tYXRpYy5jb20wHhcNMTcwNjAyMDQxMDA0WhcNMjcwNjAyMDQx MDA0WjAgMR4wHAYDVQQDExVkZXYtZmlsZS5rbm9tYXRpYy5jb20wggEiMA0GCSqG SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDsulZsai7+pv4PIcP7foK4UyzsdV23qT0e HXvIde6QC9SYk3Pa9VBi/8Z9nwI+oTi5zdPQGJDZWV14A07+kE5diq/MMtLmEZTA 1NSVrrEKOBXKqwHADGVW7Q1EfVqrU0erRWdLt/PYvSleEYNT+m18SCbLh1pboN0H YVjMLQirUpoKeKsZ3bu8fzaHaWd1+3YsQoWvw+KcDkw70gjhHzhuqZEK+6BkRBhi fZ03Orp/GqrANf45eTqyJFuC5seSj/z0TrWM1Bbjr3nRXDOkpOYd9XKNqokSJlEa NTRoAQf882WVFBFf5GwRbvcM3qzzb7VCkUlu5H9SWuo0fx830ruPAgMBAAEwDQYJ KoZIhvcNAQEFBQADggEBALo5CCt2d1G6OR34eJ33fbT9Y5Azgdzn2AS7AVN0s1fi uhDx7o/VrRyDs92Vbw1D8jCAHLHW1Nz1ojmCK/1C1zRl/gIxncb4NLP2xXLGMvAn DUnOZDHnDoBTbtHYr8Axv88/56xc7Aq5kLOV++7PtEzcMAbHTql8qv/rrHYK/TTm MhvRnveaWOyiw+9fXVfu8yV/sztpwtC6Xhf/ZLIGO6MfvwFd/RrkR4JyG7EVmyoF WCJdrG3Z22s4G0KVTbWtcIZbfXcX5VTr9nR/dTFXFzCz1nKXckgtfAgNtGMp8OKs vf9IVtoIGSQiTuPixkwfyoUhOsTmwktqOuoWUzx37Zo='
+    entryPoint: 'https://dc.knomatic.com/adfs/ls',
+    issuer: 'dev_file_knomatic',
+    callbackUrl: 'https://dev-file.knomatic.com/login/callback',
+    privateCert: fs.readFileSync(__dirname + '/sso-cert/dev_knomatic_com.key', 'utf-8'),
+    cert: fs.readFileSync(__dirname + '/sso-cert/dc.knomatic.com.crt', 'utf-8'),
+  // other authn contexts are available e.g. windows single sign-on
+    authnContext: 'http://schemas.microsoft.com/ws/2008/06/identity/authenticationmethod/password',
+  // not sure if this is necessary?
+    acceptedClockSkewMs: -1,
+    identifierFormat: null,
+  // this is configured under the Advanced tab in AD FS relying party
+    signatureAlgorithm: 'sha256'
   },
   function(profile, done) {
-    console.log("Auth with", profile);
-    if (!profile.email) {
-      return done(new Error("No email found"), null);
-    }
-    // asynchronous verification, for effect...
-    process.nextTick(function () {
-      findByEmail(profile.email, function(err, user) {
-        if (err) {
-          return done(err);
-        }
-        if (!user) {
-          // "Auto-registration"
-          users.push(profile);
-          return done(null, profile);
-        }
-        return done(null, user);
-      })
+    return done(null,
+      {
+        upn: profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn'],
+        // e.g. if you added a Group claim
+        group: profile['http://schemas.xmlsoap.org/claims/Group']
     });
   }
 ));
+
+
+// passport.use(new wsfedsaml2(
+//   {
+//     path: '/login/callback',
+//     realm: 'urn:dev2:knomatic',
+//     identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
+//     //thumbprint: '3F69575310D3A85E16165BE434252C49E4419A4B'
+//     // setup either a certificate base64 encoded (cer) or just the thumbprint of the certificate if public key is embedded in the signature
+//     cert: 'MIICvDCCAaQCCQClWYojYx5BQjANBgkqhkiG9w0BAQUFADAgMR4wHAYDVQQDExVk ZXYtZmlsZS5rbm9tYXRpYy5jb20wHhcNMTcwNjAyMDQxMDA0WhcNMjcwNjAyMDQx MDA0WjAgMR4wHAYDVQQDExVkZXYtZmlsZS5rbm9tYXRpYy5jb20wggEiMA0GCSqG SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDsulZsai7+pv4PIcP7foK4UyzsdV23qT0e HXvIde6QC9SYk3Pa9VBi/8Z9nwI+oTi5zdPQGJDZWV14A07+kE5diq/MMtLmEZTA 1NSVrrEKOBXKqwHADGVW7Q1EfVqrU0erRWdLt/PYvSleEYNT+m18SCbLh1pboN0H YVjMLQirUpoKeKsZ3bu8fzaHaWd1+3YsQoWvw+KcDkw70gjhHzhuqZEK+6BkRBhi fZ03Orp/GqrANf45eTqyJFuC5seSj/z0TrWM1Bbjr3nRXDOkpOYd9XKNqokSJlEa NTRoAQf882WVFBFf5GwRbvcM3qzzb7VCkUlu5H9SWuo0fx830ruPAgMBAAEwDQYJ KoZIhvcNAQEFBQADggEBALo5CCt2d1G6OR34eJ33fbT9Y5Azgdzn2AS7AVN0s1fi uhDx7o/VrRyDs92Vbw1D8jCAHLHW1Nz1ojmCK/1C1zRl/gIxncb4NLP2xXLGMvAn DUnOZDHnDoBTbtHYr8Axv88/56xc7Aq5kLOV++7PtEzcMAbHTql8qv/rrHYK/TTm MhvRnveaWOyiw+9fXVfu8yV/sztpwtC6Xhf/ZLIGO6MfvwFd/RrkR4JyG7EVmyoF WCJdrG3Z22s4G0KVTbWtcIZbfXcX5VTr9nR/dTFXFzCz1nKXckgtfAgNtGMp8OKs vf9IVtoIGSQiTuPixkwfyoUhOsTmwktqOuoWUzx37Zo='
+//   },
+//   function(profile, done) {
+//     console.log("Auth with", profile);
+//     if (!profile.email) {
+//       return done(new Error("No email found"), null);
+//     }
+//     // asynchronous verification, for effect...
+//     process.nextTick(function () {
+//       findByEmail(profile.email, function(err, user) {
+//         if (err) {
+//           return done(err);
+//         }
+//         if (!user) {
+//           // "Auto-registration"
+//           users.push(profile);
+//           return done(null, profile);
+//         }
+//         return done(null, user);
+//       })
+//     });
+//   }
+// ));
 
 var app = express();
 var router = express.Router();
