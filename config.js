@@ -52,7 +52,11 @@ switch(env){
           thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD'
         },
         AUTH_URL: 'https://dev-auth.knomatic.com',
-        accountId : '00000000-0000-0000-0000-000000000000'
+        accountId : '00000000-0000-0000-0000-000000000000',
+        redirectAfterAuth:{
+          base64Token: true,
+          web:'https://dev-web.knomatic.com/adfs/login/callback'
+        }
       }
     break
   default:

@@ -177,7 +177,20 @@ server.route({
           accountId: config.accountId,
           data: e.toString('base64')
       }
-      reply(token)
+
+      var redirectAfterAuth = config.redirectAfterAuth
+
+      if (redirectAfterAuth) {
+        if (redirectAfterAuth.redirect === true && redirectAfterAuth.web) {
+          var redirectUrl = redirectAfterAuth.web
+          var token  = (redirectAfterAuth.base64Token === true) ? token.toString('base64') : encodeURIComponent(token)
+          redirectUrl = redirectUrl + '#token=' + token
+          reply().redirect(redirectUrl)
+        }
+      } else {
+        reply(token)
+      }
+
     };
 
 
