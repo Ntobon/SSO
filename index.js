@@ -7,7 +7,7 @@ var Boom = require("boom");
 var config = require("./config");
 var wsfedsaml2 = require('passport-wsfed-saml2').Strategy
 var passport = require('passport')
-
+var util = require('util')
 var server = new Hapi.Server();
 
 
@@ -20,7 +20,8 @@ server.connection(serverConfig);
 
 
 passport.serializeUser(function(user, done) {
-  done(null, user);
+ console.log('user inside serialize' , user) 
+ done(null, user);
 });
 
 passport.deserializeUser(function(user, done) {
@@ -153,20 +154,30 @@ server.route({
 
     var prototype = passport._strategy('wsfed-saml2');
     var strategy = Object.create(prototype);
+    console.log('strategy logged',strategy)
+
     strategy.redirect = function (url) {
-        reply().redirect(url);
+        console.log('redirecting')
+        reply().redirect('/');
     };
     strategy.fail = function (warning) {
-
+      console.log(warning)
+        reply('Unable to complete the authentication').code(500)
     };
     strategy.error = function (error) {
-
+      console.log('error', error)
+       reply(error)
     };
     strategy.success = function (user, info) {
-
+      console.log('sucess', user , info)
+      reply(user)
     };
+
+//    console.log(request)
+
     strategy.authenticate({
         query: request.query,
+        method: 'POST',
         body: request.body || request.payload,
         session: request.session
     }, {});
