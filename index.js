@@ -1,49 +1,35 @@
-// var express = require('express')
-//   , passport = require('passport')
-//   , util = require('util')
-//   , wsfedsaml2 = require('../../lib/passport-wsfed-saml2/index').Strategy
-//   , fs = require('fs');
+var Hapi = require('hapi');
+var fs = require('fs');
+var NodeRSA = require('node-rsa');
+var ad = require("./lib/ActiveDirectoryPromise.js");
+var Joi = require("joi");
+var Boom = require("boom");
+var config = require("./config");
+var wsfedsaml2 = require('passport-wsfed-saml2').Strategy
+var passport = require('passport')
 
-var express = require('express')
-  , passport = require('passport')
-  , util = require('util')
-  , wsfedsaml2 = require('passport-wsfed-saml2').Strategy
-  , SamlStrategy = require('passport-saml').Strategy
-  , fs = require('fs')
-  , morgan = require('morgan')
-  , cookieParser = require('cookie-parser')
-  , bodyParser = require('body-parser')
-  , methodOverride = require('method-override')
-  , session = require('express-session');
+var server = new Hapi.Server();
 
-var users = [
-    { id: 1, givenName: 'matias', email: 'matias@auth10.com' }
-  , { id: 2, givenName: 'foo', email: 'foo@gmail.com' }
-];
 
-function findByEmail(email, fn) {
-  for (var i = 0, len = users.length; i < len; i++) {
-    var user = users[i];
-    if (user.email === email) {
-      return fn(null, user);
-    }
-  }
-  return fn(null, null);
+const serverConfig = {
+  port: config.port,
+  routes: { cors: true }
 }
 
+server.connection(serverConfig);
+
+
 passport.serializeUser(function(user, done) {
-  done(null, user.email);
+  done(null, user);
 });
 
-passport.deserializeUser(function(id, done) {
-  findByEmail(id, function (err, user) {
-    done(err, user);
-  });
+passport.deserializeUser(function(user, done) {
+  done(null, user);
 });
 
- passport.use(new wsfedsaml2(
+passport.use(new wsfedsaml2(
    {
-     path: '/login/callback',
+     path: '/adfs/callback',
      realm: 'urn:dev3:knomatic',
      identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
      thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD',
@@ -52,71 +38,172 @@ passport.deserializeUser(function(id, done) {
      console.log("Auth with", profile);
      return done(null, profile);
    }
- ));
-
-var app = express();
-var router = express.Router();
-
-// configure Express
-app.set('views', __dirname + '/views');
-app.set('view engine', 'ejs');
-app.use(morgan('combined'));
-app.use(cookieParser());
-app.use(bodyParser.urlencoded({
-  extended: true
-}));
-
-app.use(methodOverride());
-
-app.use(session({ 
-  secret: 'keyboard cat',
-  resave: false,
- saveUninitialized: true
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
-app.use('', router);
-app.use(express.static(__dirname + '/../../public'));
+));
 
 
-app.get('/', function(req, res){
-  res.render('index', { user: req.user });
-});
+const swaggerOptions = {
+  info: {
+    'title': 'Knomatic Remote Auth Service',
+    'version': "1.0"
+  },
+  'schemes':['https'],
+  'host':'auth.knomatic.com'
+};
 
-app.get('/account', ensureAuthenticated, function(req, res){
-  res.render('account', { user: req.user });
-});
-
-app.get('/login',
-  passport.authenticate('wsfed-saml2', { failureRedirect: '/', failureFlash: true }),
-  function(req, res) {
-    res.redirect('/');
+const goodOptions = {
+  ops: {
+    interval: 1000
+  },
+  reporters: {
+    myConsoleReporter: [{
+      module: 'good-squeeze',
+      name: 'Squeeze',
+      args: [{
+        log: '*',
+        response: '*'
+      }]
+    }, {
+      module: 'good-console'
+    }, 'stdout'],
   }
-);
+};
 
-app.post('/login/callback',
-  passport.authenticate('wsfed-saml2', { failureRedirect: '/', failureFlash: true }),
-  function(req, res) {
-    res.redirect('/');
+
+server.register([
+  require('inert'),
+  require('vision'),
+  {
+    'register': require('hapi-swagger'),
+    'options': swaggerOptions
+  },
+  {
+    register: require('good'),
+    'options': goodOptions,
+  },
+], (err) => {
+  server.key = new NodeRSA();
+
+  fs.readFile('./private.key', 'utf8', function (err, data) {
+    server.key.importKey(data);
+  });
+
+  server.start((err) => {
+    if (err) {
+      console.log(err);
+    } else {
+      console.log('Server running at:', server.info.uri);
+    }
+  });
+});
+
+server.route({
+  method: 'POST',
+  path: '/',
+  config: {
+    tags: ['api'],
+    validate: {
+      payload: {
+        username: Joi.string().required(),
+        password: Joi.string().required(),
+      }
+    }
+  },
+  handler: function (request, reply) {
+    var adGroups = [];
+
+    ad.authenticate(request.payload.username, request.payload.password)
+      .then(function () {
+        return ad.getGroups(request.payload.username);
+      })
+      .then(function (groups) {
+        adGroups = groups;
+      })
+      .then(function () {
+        return ad.findUser(request.payload.username);
+      })
+      .then(function (userObj) {
+
+        var e = server.key.encryptPrivate({
+          id: request.payload.username,
+          adUser: userObj,
+          adGroups: adGroups
+        });
+
+        return reply({
+          accountId: config.accountId,
+          data: e.toString('base64')
+        });
+
+      })
+      .catch(function (err) {
+        console.log("Login Error:" + err);
+        return reply(Boom.unauthorized());
+      });
   }
-);
-
-app.get('/logout', function(req, res){
-  req.logout();
-  res.redirect('/');
 });
 
-app.listen(8002, function () {
-  console.log("Server listening in http://localhost:8002");
+
+server.route({
+  method: 'POST',
+  path: '/adfs/callback',
+  config: {
+    tags: ['api']
+  },
+  handler: function (request, reply) {
+
+    var prototype = passport._strategy('wsfed-saml2');
+    var strategy = Object.create(prototype);
+    strategy.redirect = function (url) {
+        reply().redirect(url);
+    };
+    strategy.fail = function (warning) {
+
+    };
+    strategy.error = function (error) {
+
+    };
+    strategy.success = function (user, info) {
+
+    };
+    strategy.authenticate({
+        query: request.query,
+        body: request.body || request.payload,
+        session: request.session
+    }, {});
+
+  }
 });
 
-// Simple route middleware to ensure user is authenticated.
-//   Use this route middleware on any resource that needs to be protected.  If
-//   the request is authenticated (typically via a persistent login session),
-//   the request will proceed.  Otherwise, the user will be redirected to the
-//   login page.
-function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) { return next(); }
-  res.redirect('/login')
-}
+
+
+server.route({
+  method: 'GET',
+  path: '/adfs/login',
+  config: {
+    tags: ['api'],
+    auth: false
+  },
+  handler: function (request, reply) {
+    var prototype = passport._strategy('wsfed-saml2');
+    var strategy = Object.create(prototype);
+    strategy.redirect = function (url) {
+        reply().redirect(url);
+    };
+    strategy.fail = function (warning) {
+
+    };
+    strategy.error = function (error) {
+
+    };
+    strategy.success = function (info) {
+
+    };
+    strategy.authenticate({
+        query: request.query,
+        body: request.body || request.payload,
+        session: request.session
+    }, {});
+  }
+});
+
+
