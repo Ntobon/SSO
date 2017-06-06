@@ -1,14 +1,81 @@
-var activeDirectoryConfig = {  
-  url: 'ldap://dc.yourDCServer.com',
-  baseDN: 'DC=YourDomain,DC=com',
-  username: 'dcUser@YourDomain.com',
-  password: 'dcUsersPassword'
+var _ = require('lodash')
+
+var env = process.env.NODE_ENV || 'local';
+
+var ADFS_XML_SCHEMA_MAPPINGS = [
+  {
+    claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+    user_key:'email'
+  },
+  {
+    claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
+    user_key:'firstName'
+  },
+  {
+    claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
+    user_key:'lastName'
+  },
+  {
+    claim: 'http://schemas.microsoft.com/ws/2008/06/identity/claims/primarygroupsid',
+    user_key:'groups'
+  },
+  {
+    claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier',
+    user_key:'nameIdentifier'
+  }
+]
+
+
+
+var constants = {
+  PORT: "8002",
+  NODE_ENV: env,
+  ADFS_XML_SCHEMA_MAPPINGS
 };
 
-var accountId = "Knomatic";
-var port = "8002";
+var customizations = {};
 
+switch(env){
+  case 'development':
+      //add credentials after making the repo private
+      customizations = {
+        activeDirectoryConfig: {  
+          url: 'ldap://dc.yourDCServer.com',
+          baseDN: 'DC=YourDomain,DC=com',
+          username: 'dcUser@YourDomain.com',
+          password: 'dcUsersPassword'
+        }, 
+        wsfedsaml2: {   ///ADFS trusted relying party options
+          path: '/adfs/callback',
+          realm: 'urn:dev3:knomatic',
+          identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
+          thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD',
+        },
+        AUTH_URL: 'https://dev-auth.knomatic.com',
+        accountId : '00000000-0000-0000-0000-000000000000'
+      }
+    break
+  default:
+      customizations = {
+        activeDirectoryConfig: {  
+          url: 'ldap://dc.yourDCServer.com',
+          baseDN: 'DC=YourDomain,DC=com',
+          username: 'dcUser@YourDomain.com',
+          password: 'dcUsersPassword'
+        }, 
+        wsfedsaml2: {   ///ADFS trusted relying party options
+          path: '/adfs/callback',
+          realm: 'urn:dev3:knomatic',
+          identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
+          thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD',
+        },
+        AUTH_URL: 'https://dev-auth.knomatic.com',
+        accountId:'00000000-0000-0000-0000-000000000000'
+      }  
+   break
 
-module.exports.activeDirectoryConfig = activeDirectoryConfig;
-module.exports.accountId = accountId;
-module.exports.port = port;
+}
+
+const config = _.assign(constants, customizations)
+
+module.exports = config

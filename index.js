@@ -6,40 +6,21 @@ var Joi = require("joi");
 var Boom = require("boom");
 var config = require("./config");
 var wsfedsaml2 = require('passport-wsfed-saml2').Strategy
-var passport = require('passport')
 var util = require('util')
 var server = new Hapi.Server();
+var _ = require('lodash')
 
+///getting passport with wsfed strategy initialized
+var passport = require('./lib/passport.js')
 
 const serverConfig = {
-  port: config.port,
+  port: config.PORT,
   routes: { cors: true }
 }
 
+console.log(config)
+
 server.connection(serverConfig);
-
-
-passport.serializeUser(function(user, done) {
- console.log('user inside serialize' , user) 
- done(null, user);
-});
-
-passport.deserializeUser(function(user, done) {
-  done(null, user);
-});
-
-passport.use(new wsfedsaml2(
-   {
-     path: '/adfs/callback',
-     realm: 'urn:dev3:knomatic',
-     identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
-     thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD',
-   },
-   function(profile, done) {
-     console.log("Auth with", profile);
-     return done(null, profile);
-   }
-));
 
 
 const swaggerOptions = {
@@ -154,7 +135,6 @@ server.route({
 
     var prototype = passport._strategy('wsfed-saml2');
     var strategy = Object.create(prototype);
-    console.log('strategy logged',strategy)
 
     strategy.redirect = function (url) {
         console.log('redirecting')
@@ -170,10 +150,31 @@ server.route({
     };
     strategy.success = function (user, info) {
       console.log('sucess', user , info)
-      reply(user)
+      if (!user){
+        reply('Unable to get user data from ADFS server').code(400)
+      }
+      let ADFS_XML_SCHEMA_MAPPINGS = config.ADFS_XML_SCHEMA_MAPPINGS
+
+      let knomaticUserSchema = {}
+      _.forOwn(user, (value, key)=>{
+          let map = _.find(ADFS_XML_SCHEMA_MAPPINGS, {claim: key})
+          if (map){
+            knomaticUserSchema[map.user_key] = value
+          } else {
+            knomaticUserSchema[key] = value
+          }
+          if (map.user_key === 'groups') {
+            knomaticUserSchema['adGroups'] = value
+          }
+      })
+      var e = server.key.encryptPrivate(knomaticUserSchema);
+      var token = {
+          accountId: config.accountId,
+          data: e.toString('base64')
+      }
+      reply(token)
     };
 
-//    console.log(request)
 
     strategy.authenticate({
         query: request.query,
@@ -200,15 +201,7 @@ server.route({
     strategy.redirect = function (url) {
         reply().redirect(url);
     };
-    strategy.fail = function (warning) {
 
-    };
-    strategy.error = function (error) {
-
-    };
-    strategy.success = function (info) {
-
-    };
     strategy.authenticate({
         query: request.query,
         body: request.body || request.payload,
