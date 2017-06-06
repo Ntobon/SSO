@@ -18,7 +18,7 @@ const serverConfig = {
   routes: { cors: true }
 }
 
-console.log(config)
+//console.log(config)
 
 server.connection(serverConfig);
 
@@ -181,11 +181,19 @@ server.route({
       var redirectAfterAuth = config.redirectAfterAuth
 
       if (redirectAfterAuth) {
-        if (redirectAfterAuth.redirect === true && redirectAfterAuth.web) {
+        console.log('redirectParams' ,  redirectAfterAuth)
+        token  = JSON.stringify(token)
+        if (redirectAfterAuth.redirect == true && redirectAfterAuth.web) {
           var redirectUrl = redirectAfterAuth.web
-          var token  = (redirectAfterAuth.base64Token === true) ? token.toString('base64') : encodeURIComponent(token)
-          redirectUrl = redirectUrl + '#token=' + token
+          //console.log('token', token.toString())
+          //console.log('token base', new Buffer(token).toString('base64'))
+          //console.log('token', JSON.stringify(token))
+          var token  = (redirectAfterAuth.base64Token == true) ? new Buffer(token).toString('base64') : encodeURIComponent(token)
+          redirectUrl = redirectUrl + '?token=' + token
+          console.log(redirectUrl)
           reply().redirect(redirectUrl)
+        } else {
+          reply(token)
         }
       } else {
         reply(token)

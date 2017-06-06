@@ -54,6 +54,7 @@ switch(env){
         AUTH_URL: 'https://dev-auth.knomatic.com',
         accountId : '00000000-0000-0000-0000-000000000000',
         redirectAfterAuth:{
+          redirect:true,
           base64Token: true,
           web:'https://dev-web.knomatic.com/adfs/login/callback'
         }
