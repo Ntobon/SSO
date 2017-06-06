@@ -49,7 +49,7 @@ switch(env){
           path: '/adfs/callback',
           realm: 'urn:dev3:knomatic',
           identityProviderUrl: 'https://dc.knomatic.com/adfs/ls',
-          thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD',
+          thumbprint: '‎C2C561DDA76F69B0EA223C047A88113BF8CCD8CD'
         },
         AUTH_URL: 'https://dev-auth.knomatic.com',
         accountId : '00000000-0000-0000-0000-000000000000'
