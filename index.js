@@ -157,16 +157,21 @@ server.route({
 
       let knomaticUserSchema = {}
       _.forOwn(user, (value, key)=>{
-          let map = _.find(ADFS_XML_SCHEMA_MAPPINGS, {claim: key})
-          if (map){
+          let map = _.find(ADFS_XML_SCHEMA_MAPPINGS, {claim: key}) || {user_key:false}
+         // console.log(ADFS_XML_SCHEMA_MAPPINGS)
+//          console.log('key',key)
+//          console.log('value', value)
+          if ( map.user_key  && value){
+//            console.log(map)
             knomaticUserSchema[map.user_key] = value
-          } else {
+          } else if(value) {
             knomaticUserSchema[key] = value
           }
-          if (map.user_key === 'groups') {
+          if (map.user_key === 'groups' && value) {
             knomaticUserSchema['adGroups'] = value
           }
       })
+      console.log('user_data' , knomaticUserSchema)
       var e = server.key.encryptPrivate(knomaticUserSchema);
       var token = {
           accountId: config.accountId,
