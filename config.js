@@ -5,15 +5,15 @@ var env = process.env.NODE_ENV || 'local';
 var ADFS_XML_SCHEMA_MAPPINGS = [
   {
     claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
-    user_key:'email'
+    user_key:'mail'
   },
   {
     claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
-    user_key:'firstName'
+    user_key:'givenName'
   },
   {
     claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
-    user_key:'lastName'
+    user_key:'sn'
   },
   {
     claim: 'http://schemas.microsoft.com/ws/2008/06/identity/claims/primarygroupsid',
@@ -21,7 +21,7 @@ var ADFS_XML_SCHEMA_MAPPINGS = [
   },
   {
     claim: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier',
-    user_key:'nameIdentifier'
+    user_key:'userPrincipalName'
   }
 ]
 
